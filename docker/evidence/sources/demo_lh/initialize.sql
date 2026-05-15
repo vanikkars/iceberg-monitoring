@@ -13,9 +13,13 @@ CREATE OR REPLACE SECRET minio (
     REGION      'us-east-1'
 );
 
-ATTACH '' AS iceberg_catalog (
+ATTACH 'demo_lh' AS iceberg_catalog (
     TYPE                   iceberg,
-    ENDPOINT               'http://nessie:19120/iceberg',
-    AUTHORIZATION_TYPE     'none',
+    ENDPOINT               'http://polaris:8181/api/catalog',
+    AUTHORIZATION_TYPE     'oauth2',
+    CLIENT_ID              'root',
+    CLIENT_SECRET          's3cr3t',
+    OAUTH2_SERVER_URI      'http://polaris:8181/api/catalog/v1/oauth/tokens',
+    SCOPE                  'PRINCIPAL_ROLE:ALL',
     ACCESS_DELEGATION_MODE 'none'
 );
