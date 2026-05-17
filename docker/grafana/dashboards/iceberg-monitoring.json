@@ -1,0 +1,171 @@
+{
+  "title": "Iceberg Monitoring",
+  "uid": "iceberg-monitoring",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "timezone": "browser",
+  "panels": [
+
+    { "type": "row", "title": "Health KPIs", "collapsed": false, "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "id": 100 },
+
+    {
+      "type": "stat", "title": "transactions — Total Records", "id": 1,
+      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT CAST(element_at(summary, 'total-records') AS BIGINT) AS total_records\nFROM iceberg.demo.\"transactions$snapshots\"\nORDER BY committed_at DESC\nLIMIT 1", "format": 1 }]
+    },
+    {
+      "type": "stat", "title": "transactions — Total Commits", "id": 2,
+      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT count(*) AS total_commits FROM iceberg.demo.\"transactions$snapshots\"", "format": 1 }]
+    },
+    {
+      "type": "gauge", "title": "transactions — Avg File Size", "id": 3,
+      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "showThresholdLabels": false, "showThresholdMarkers": true },
+      "fieldConfig": { "defaults": { "unit": "kbytes", "min": 0, "max": 512, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 32 }, { "color": "green", "value": 64 }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT\n  CASE WHEN total_data_files > 0\n       THEN round(CAST(total_files_size_bytes AS DOUBLE) / total_data_files / 1024.0, 2)\n       ELSE 0 END AS avg_file_size_kb\nFROM (\n  SELECT\n    CAST(element_at(summary, 'total-data-files') AS BIGINT) AS total_data_files,\n    CAST(element_at(summary, 'total-files-size')  AS BIGINT) AS total_files_size_bytes\n  FROM iceberg.demo.\"transactions$snapshots\"\n  ORDER BY committed_at DESC LIMIT 1\n)", "format": 1 }]
+    },
+    {
+      "type": "stat", "title": "transactions — Mins Since Last Commit", "id": 4,
+      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "m", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 15 }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT date_diff('minute', max(committed_at), now()) AS minutes_since_last_commit\nFROM iceberg.demo.\"transactions$snapshots\"", "format": 1 }]
+    },
+
+    {
+      "type": "stat", "title": "users — Total Records", "id": 5,
+      "gridPos": { "x": 0, "y": 5, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT CAST(element_at(summary, 'total-records') AS BIGINT) AS total_records\nFROM iceberg.demo.\"users$snapshots\"\nORDER BY committed_at DESC\nLIMIT 1", "format": 1 }]
+    },
+    {
+      "type": "stat", "title": "users — Total Commits", "id": 6,
+      "gridPos": { "x": 6, "y": 5, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT count(*) AS total_commits FROM iceberg.demo.\"users$snapshots\"", "format": 1 }]
+    },
+    {
+      "type": "gauge", "title": "users — Avg File Size", "id": 7,
+      "gridPos": { "x": 12, "y": 5, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "showThresholdLabels": false, "showThresholdMarkers": true },
+      "fieldConfig": { "defaults": { "unit": "kbytes", "min": 0, "max": 512, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 32 }, { "color": "green", "value": 64 }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT\n  CASE WHEN total_data_files > 0\n       THEN round(CAST(total_files_size_bytes AS DOUBLE) / total_data_files / 1024.0, 2)\n       ELSE 0 END AS avg_file_size_kb\nFROM (\n  SELECT\n    CAST(element_at(summary, 'total-data-files') AS BIGINT) AS total_data_files,\n    CAST(element_at(summary, 'total-files-size')  AS BIGINT) AS total_files_size_bytes\n  FROM iceberg.demo.\"users$snapshots\"\n  ORDER BY committed_at DESC LIMIT 1\n)", "format": 1 }]
+    },
+    {
+      "type": "stat", "title": "users — Mins Since Last Commit", "id": 8,
+      "gridPos": { "x": 18, "y": 5, "w": 6, "h": 4 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "m", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 15 }] } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT date_diff('minute', max(committed_at), now()) AS minutes_since_last_commit\nFROM iceberg.demo.\"users$snapshots\"", "format": 1 }]
+    },
+
+    { "type": "row", "title": "Commit Activity", "collapsed": false, "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 }, "id": 101 },
+
+    {
+      "type": "timeseries", "title": "Commits per 5-Minute Window", "id": 10,
+      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT\n  from_unixtime(floor(to_unixtime(committed_at) / 300.0) * 300) AS time,\n  count(*) FILTER (WHERE tbl = 'transactions') AS transactions,\n  count(*) FILTER (WHERE tbl = 'users')        AS users\nFROM (\n  SELECT committed_at, 'transactions' AS tbl FROM iceberg.demo.\"transactions$snapshots\"\n  UNION ALL\n  SELECT committed_at, 'users'        AS tbl FROM iceberg.demo.\"users$snapshots\"\n)\nGROUP BY 1\nORDER BY 1", "format": 0 }]
+    },
+    {
+      "type": "timeseries", "title": "Records Added per 5-Minute Window", "id": 11,
+      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT\n  from_unixtime(floor(to_unixtime(committed_at) / 300.0) * 300) AS time,\n  coalesce(sum(added_records) FILTER (WHERE tbl = 'transactions'), 0) AS transactions,\n  coalesce(sum(added_records) FILTER (WHERE tbl = 'users'),        0) AS users\nFROM (\n  SELECT\n    committed_at,\n    'transactions' AS tbl,\n    CAST(element_at(summary, 'added-records') AS BIGINT) AS added_records\n  FROM iceberg.demo.\"transactions$snapshots\"\n  UNION ALL\n  SELECT\n    committed_at,\n    'users' AS tbl,\n    CAST(element_at(summary, 'added-records') AS BIGINT) AS added_records\n  FROM iceberg.demo.\"users$snapshots\"\n)\nGROUP BY 1\nORDER BY 1", "format": 0 }]
+    },
+
+    { "type": "row", "title": "Records Growth", "collapsed": false, "gridPos": { "x": 0, "y": 18, "w": 24, "h": 1 }, "id": 102 },
+
+    {
+      "type": "timeseries", "title": "Cumulative Total Records", "id": 20,
+      "gridPos": { "x": 0, "y": 19, "w": 12, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT\n  committed_at AS time,\n  max(CASE WHEN tbl = 'transactions' THEN CAST(element_at(summary, 'total-records') AS BIGINT) END) AS transactions,\n  max(CASE WHEN tbl = 'users'        THEN CAST(element_at(summary, 'total-records') AS BIGINT) END) AS users\nFROM (\n  SELECT committed_at, 'transactions' AS tbl, summary FROM iceberg.demo.\"transactions$snapshots\"\n  UNION ALL\n  SELECT committed_at, 'users'        AS tbl, summary FROM iceberg.demo.\"users$snapshots\"\n)\nGROUP BY committed_at\nORDER BY committed_at", "format": 0 }]
+    },
+    {
+      "type": "timeseries", "title": "Records Added Per Commit", "id": 21,
+      "gridPos": { "x": 12, "y": 19, "w": 12, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } },
+      "targets": [{ "refId": "A", "rawSql": "SELECT\n  committed_at AS time,\n  max(CASE WHEN tbl = 'transactions' THEN CAST(element_at(summary, 'added-records') AS BIGINT) END) AS transactions,\n  max(CASE WHEN tbl = 'users'        THEN CAST(element_at(summary, 'added-records') AS BIGINT) END) AS users\nFROM (\n  SELECT committed_at, 'transactions' AS tbl, summary FROM iceberg.demo.\"transactions$snapshots\"\n  UNION ALL\n  SELECT committed_at, 'users'        AS tbl, summary FROM iceberg.demo.\"users$snapshots\"\n)\nGROUP BY committed_at\nORDER BY committed_at", "format": 0 }]
+    },
+
+    { "type": "row", "title": "File Distribution", "collapsed": false, "gridPos": { "x": 0, "y": 27, "w": 24, "h": 1 }, "id": 103 },
+
+    {
+      "type": "table", "title": "Current Data File Distribution", "id": 30,
+      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "sortBy": [{ "displayName": "table_name", "desc": false }] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "avg_file_size_kb" }, "properties": [{ "id": "unit", "value": "kbytes" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 32 }, { "color": "green", "value": 64 }] } }, { "id": "custom.displayMode", "value": "color-background" }] },
+          { "matcher": { "id": "byName", "options": "total_size_mb" }, "properties": [{ "id": "unit", "value": "decmbytes" }] }
+        ]
+      },
+      "targets": [{ "refId": "A", "rawSql": "SELECT\n  table_name,\n  file_count,\n  total_records,\n  avg_records_per_file,\n  min_records_per_file,\n  max_records_per_file,\n  avg_file_size_kb,\n  min_file_size_kb,\n  max_file_size_kb,\n  total_size_mb\nFROM (\n  SELECT\n    'transactions' AS table_name,\n    count(*) AS file_count,\n    sum(record_count) AS total_records,\n    round(CAST(avg(record_count) AS DOUBLE), 0) AS avg_records_per_file,\n    min(record_count) AS min_records_per_file,\n    max(record_count) AS max_records_per_file,\n    round(CAST(avg(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS avg_file_size_kb,\n    round(CAST(min(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS min_file_size_kb,\n    round(CAST(max(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS max_file_size_kb,\n    round(CAST(sum(file_size_in_bytes) AS DOUBLE) / 1024.0 / 1024.0, 2) AS total_size_mb\n  FROM iceberg.demo.\"transactions$files\"\n  WHERE content = 0\n  UNION ALL\n  SELECT\n    'users' AS table_name,\n    count(*) AS file_count,\n    sum(record_count) AS total_records,\n    round(CAST(avg(record_count) AS DOUBLE), 0) AS avg_records_per_file,\n    min(record_count) AS min_records_per_file,\n    max(record_count) AS max_records_per_file,\n    round(CAST(avg(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS avg_file_size_kb,\n    round(CAST(min(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS min_file_size_kb,\n    round(CAST(max(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS max_file_size_kb,\n    round(CAST(sum(file_size_in_bytes) AS DOUBLE) / 1024.0 / 1024.0, 2) AS total_size_mb\n  FROM iceberg.demo.\"users$files\"\n  WHERE content = 0\n)", "format": 1 }]
+    },
+
+    { "type": "row", "title": "Manifest Health", "collapsed": false, "gridPos": { "x": 0, "y": 36, "w": 24, "h": 1 }, "id": 104 },
+
+    {
+      "type": "table", "title": "Manifest Health", "id": 40,
+      "gridPos": { "x": 0, "y": 37, "w": 24, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "est_orphaned_manifests" }, "properties": [{ "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, { "id": "custom.displayMode", "value": "color-background" }] },
+          { "matcher": { "id": "byName", "options": "pending_deleted_files" }, "properties": [{ "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, { "id": "custom.displayMode", "value": "color-background" }] }
+        ]
+      },
+      "targets": [{ "refId": "A", "rawSql": "WITH txn_manifests AS (\n  SELECT\n    'transactions' AS table_name,\n    count(*) AS active_manifest_count,\n    sum(added_data_files_count) AS added_data_files,\n    sum(existing_data_files_count) AS existing_data_files,\n    sum(deleted_data_files_count) AS pending_deleted_files,\n    sum(added_rows_count) AS added_rows,\n    sum(existing_rows_count) AS existing_rows,\n    sum(deleted_rows_count) AS pending_deleted_rows\n  FROM iceberg.demo.\"transactions$manifests\"\n),\ntxn_snap_count AS (\n  SELECT count(*) AS total_snapshot_count FROM iceberg.demo.\"transactions$snapshots\"\n),\nusr_manifests AS (\n  SELECT\n    'users' AS table_name,\n    count(*) AS active_manifest_count,\n    sum(added_data_files_count) AS added_data_files,\n    sum(existing_data_files_count) AS existing_data_files,\n    sum(deleted_data_files_count) AS pending_deleted_files,\n    sum(added_rows_count) AS added_rows,\n    sum(existing_rows_count) AS existing_rows,\n    sum(deleted_rows_count) AS pending_deleted_rows\n  FROM iceberg.demo.\"users$manifests\"\n),\nusr_snap_count AS (\n  SELECT count(*) AS total_snapshot_count FROM iceberg.demo.\"users$snapshots\"\n)\nSELECT\n  m.table_name,\n  m.active_manifest_count,\n  s.total_snapshot_count,\n  greatest(0, s.total_snapshot_count - m.active_manifest_count) AS est_orphaned_manifests,\n  m.added_data_files,\n  m.existing_data_files,\n  m.pending_deleted_files,\n  m.added_rows,\n  m.existing_rows,\n  m.pending_deleted_rows\nFROM txn_manifests m, txn_snap_count s\nUNION ALL\nSELECT\n  m.table_name,\n  m.active_manifest_count,\n  s.total_snapshot_count,\n  greatest(0, s.total_snapshot_count - m.active_manifest_count) AS est_orphaned_manifests,\n  m.added_data_files,\n  m.existing_data_files,\n  m.pending_deleted_files,\n  m.added_rows,\n  m.existing_rows,\n  m.pending_deleted_rows\nFROM usr_manifests m, usr_snap_count s", "format": 1 }]
+    },
+
+    { "type": "row", "title": "Daily Stats", "collapsed": false, "gridPos": { "x": 0, "y": 45, "w": 24, "h": 1 }, "id": 105 },
+
+    {
+      "type": "barchart", "title": "Daily Added Records", "id": 50,
+      "gridPos": { "x": 0, "y": 46, "w": 12, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "xField": "time", "stacking": "none", "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [{ "refId": "A", "rawSql": "WITH snapshots AS (\n  SELECT 'transactions' AS table_name, committed_at,\n    CAST(element_at(summary, 'added-records')    AS BIGINT) AS added_records,\n    CAST(element_at(summary, 'added-data-files') AS BIGINT) AS added_data_files,\n    CAST(element_at(summary, 'added-files-size') AS BIGINT) AS added_files_size_bytes,\n    CAST(element_at(summary, 'total-records')    AS BIGINT) AS total_records,\n    CAST(element_at(summary, 'total-data-files') AS BIGINT) AS total_data_files,\n    CAST(element_at(summary, 'total-files-size') AS BIGINT) AS total_files_size_bytes\n  FROM iceberg.demo.\"transactions$snapshots\"\n  UNION ALL\n  SELECT 'users' AS table_name, committed_at,\n    CAST(element_at(summary, 'added-records')    AS BIGINT) AS added_records,\n    CAST(element_at(summary, 'added-data-files') AS BIGINT) AS added_data_files,\n    CAST(element_at(summary, 'added-files-size') AS BIGINT) AS added_files_size_bytes,\n    CAST(element_at(summary, 'total-records')    AS BIGINT) AS total_records,\n    CAST(element_at(summary, 'total-data-files') AS BIGINT) AS total_data_files,\n    CAST(element_at(summary, 'total-files-size') AS BIGINT) AS total_files_size_bytes\n  FROM iceberg.demo.\"users$snapshots\"\n),\ndaily AS (\n  SELECT table_name, date_trunc('day', committed_at) AS day,\n    coalesce(sum(added_records), 0) AS total_added_records,\n    count(*) AS commit_count\n  FROM snapshots\n  GROUP BY 1, 2\n)\nSELECT\n  day AS time,\n  sum(total_added_records) FILTER (WHERE table_name = 'transactions') AS transactions,\n  sum(total_added_records) FILTER (WHERE table_name = 'users')        AS users\nFROM daily\nGROUP BY day\nORDER BY day", "format": 1 }]
+    },
+    {
+      "type": "barchart", "title": "Daily Commit Count", "id": 51,
+      "gridPos": { "x": 12, "y": 46, "w": 12, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "xField": "time", "stacking": "none", "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [{ "refId": "A", "rawSql": "WITH snapshots AS (\n  SELECT 'transactions' AS table_name, committed_at\n  FROM iceberg.demo.\"transactions$snapshots\"\n  UNION ALL\n  SELECT 'users' AS table_name, committed_at\n  FROM iceberg.demo.\"users$snapshots\"\n),\ndaily AS (\n  SELECT table_name, date_trunc('day', committed_at) AS day, count(*) AS commit_count\n  FROM snapshots\n  GROUP BY 1, 2\n)\nSELECT\n  day AS time,\n  sum(commit_count) FILTER (WHERE table_name = 'transactions') AS transactions,\n  sum(commit_count) FILTER (WHERE table_name = 'users')        AS users\nFROM daily\nGROUP BY day\nORDER BY day", "format": 1 }]
+    }
+
+  ]
+}
