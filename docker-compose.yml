@@ -221,6 +221,8 @@ services:
     depends_on:
       polaris-init:
         condition: service_completed_successfully
+      trino-coordinator:
+        condition: service_healthy
 
   # ── Kafka producer (Python, sends synthetic events) ───────────────────────
   kafka-producer:
