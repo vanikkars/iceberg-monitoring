@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: Trino
+    type: trino-datasource
+    uid: trino-iceberg
+    access: proxy
+    url: http://trino-coordinator:8080
+    basicAuth: true
+    basicAuthUser: trino
+    secureJsonData:
+      basicAuthPassword: ""
+    jsonData:
+      catalog: iceberg
+      schema: demo
+    isDefault: true
+    editable: false

@@ -224,6 +224,25 @@ services:
       trino-coordinator:
         condition: service_healthy
 
+  # ── Grafana (Iceberg monitoring dashboard) ───────────────────────────────
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
+    ports:
+      - "3100:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: trino-datasource
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: trino-datasource
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/iceberg-monitoring.json
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      trino-coordinator:
+        condition: service_healthy
+
   # ── Kafka producer (Python, sends synthetic events) ───────────────────────
   kafka-producer:
     build:
