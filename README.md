@@ -19,7 +19,7 @@ Iceberg tables using Apache Flink, with a live BI dashboard powered by Evidence.
 | flink-jobmanager    | custom (Flink + Iceberg + S3 JARs)         | 8081 (UI)          |
 | flink-taskmanager   | custom                                     | —                  |
 | flink-sql-job       | custom (submits SQL job then exits)        | —                  |
-| jupyter             | custom (DuckDB + Iceberg + pyiceberg)      | 8888               |
+| jupyter             | custom (Python + Trino client)             | 8888               |
 | evidence            | custom (Node 20, Evidence 40.x)            | 3000               |
 | grafana             | grafana/grafana:11.5.2 (+ trino-datasource)| 3100               |
 | kafka-producer      | custom (Python 3, kafka-python)            | —                  |
@@ -68,9 +68,10 @@ The producer then streams transactions continuously at a configurable rate
 
 ## Iceberg catalog (Polaris)
 
-Flink, DuckDB (Jupyter + Evidence) all share the same catalog via Apache
-Polaris's Iceberg REST API at `http://polaris:8181/api/catalog`, authenticated
-with OAuth2 client credentials. The two Iceberg tables are:
+Flink and Trino both share the same catalog via Apache Polaris's Iceberg REST
+API at `http://polaris:8181/api/catalog`, authenticated with OAuth2 client
+credentials. Jupyter, Evidence, and Grafana all read through Trino. The two
+Iceberg tables are:
 
 - `iceberg_catalog.demo.users`
 - `iceberg_catalog.demo.transactions`
@@ -91,13 +92,13 @@ with OAuth2 client credentials. The two Iceberg tables are:
 The Evidence dashboard at **http://localhost:3000** shows live metrics sourced
 from the Iceberg tables. On startup it:
 
-1. Runs `evidence sources` — connects DuckDB to Polaris via the Iceberg REST
-   catalog, executes the SQL queries in `sources/demo_lh/`, and writes
-   Parquet snapshots to `.evidence/template/static/data/`.
+1. Runs `evidence sources` — executes the SQL queries in `sources/demo_lh/`
+   against Trino and writes Parquet snapshots to
+   `.evidence/template/static/data/`.
 2. Starts the Vite dev server which serves the dashboard at port 3000.
 
 The page (`pages/index.md`) uses inline SQL code blocks that query the
-pre-built Parquet snapshots loaded into DuckDB-WASM in the browser:
+pre-built Parquet snapshots loaded by Evidence's frontend in the browser:
 
 ```sql
 select * from demo_lh.kpis
@@ -142,8 +143,14 @@ docker compose restart grafana
 
 ## JupyterLab exploration
 
-Open **http://localhost:8888** and run `query_iceberg.ipynb`. It attaches
-DuckDB directly to the Polaris REST catalog and queries both tables.
+Open **http://localhost:8888**. Two notebooks ship with the demo, both
+querying through the Trino coordinator:
+
+- `trino_ad_hoc_iceberg_tables_research.ipynb` — ad-hoc analytics on
+  `iceberg.demo.users` and `iceberg.demo.transactions`
+- `trino_iceberg_metadata.ipynb` — guided tour of Iceberg metadata tables
+  (`$history`, `$snapshots`, `$files`, `$manifests`, `$partitions`, `$refs`,
+  `$entries`)
 
 ## Query from Flink SQL client
 

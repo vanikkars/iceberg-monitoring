@@ -6,7 +6,7 @@
 SET 'execution.checkpointing.interval' = '30s';
 
 -- 1. Register the Iceberg catalog via Polaris's Iceberg REST endpoint.
---    Flink, Trino, and DuckDB all connect to this same REST API (OAuth2 client credentials).
+--    Flink and Trino both connect to this same REST API (OAuth2 client credentials).
 CREATE CATALOG iceberg_catalog WITH (
     'type'         = 'iceberg',
     'catalog-impl' = 'org.apache.iceberg.rest.RESTCatalog',

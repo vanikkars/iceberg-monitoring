@@ -193,7 +193,7 @@ services:
       trino-coordinator:
         condition: service_healthy
 
-  # ── Jupyter Lab (DuckDB + Iceberg queries) ───────────────────────────────
+  # ── Jupyter Lab (Trino + Iceberg queries) ────────────────────────────────
   jupyter:
     build:
       context: ./docker/jupyter
