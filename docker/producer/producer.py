@@ -32,6 +32,7 @@ from kafka import KafkaProducer
 
 BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 EVENTS_PER_SECOND = float(os.environ.get("EVENTS_PER_SECOND", "2"))
+WAIT_TILL_BOOT = int(os.environ.get('WAIT_TILL_BOOT', 120)) # wait for 2 minutes before producing messages
 
 N_USERS = 50
 
@@ -115,6 +116,9 @@ def main() -> None:
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         acks="all",
     )
+    print(f'waiting for the environment to setup: {WAIT_TILL_BOOT}')
+    time.sleep(WAIT_TILL_BOOT)
+
 
     # 1. Seed users — publish all of them before any transactions/orders
     print(f"Seeding {N_USERS} users into 'users' topic …", flush=True)
