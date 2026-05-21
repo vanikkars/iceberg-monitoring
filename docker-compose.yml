@@ -58,37 +58,39 @@ services:
         echo 'Bucket ready.'
       "
 
-  # ── Nessie Catalog ────────────────────────────────────────────────────────
-  nessie:
-    image: ghcr.io/projectnessie/nessie:0.107.5
-    container_name: nessie
+  # ── Apache Polaris (Iceberg REST catalog) ────────────────────────────────
+  polaris:
+    image: apache/polaris:latest
+    container_name: polaris
     depends_on:
       minio-init:
         condition: service_completed_successfully
     ports:
-      - "19120:19120"
+      - "8181:8181"
+      - "8182:8182"
     environment:
-      QUARKUS_HTTP_PORT: 19120
-      QUARKUS_MANAGEMENT_PORT: 9002
-      NESSIE_VERSION_STORE_TYPE: ROCKSDB
-      NESSIE_VERSION_STORE_PERSIST_ROCKS_DB_DATABASE_PATH: /nessie/data
-      # Warehouse name + location use a properties file (hyphens in names are
-      # ambiguous as env vars). S3 credentials stay as env vars (no ambiguity).
-      QUARKUS_CONFIG_LOCATIONS: /nessie/config/nessie.properties
-      NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_REGION: us-east-1
-      NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_PATH_STYLE_ACCESS: "true"
-      NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_ENDPOINT: http://minio:9000/
-      NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_ACCESS_KEY: "urn:nessie-secret:quarkus:nessie.catalog.secrets.minio"
-      NESSIE_CATALOG_SECRETS_MINIO_NAME: minioadmin
-      NESSIE_CATALOG_SECRETS_MINIO_SECRET: minioadmin
-    volumes:
-      - ./docker/nessie/data:/nessie/data
-      - ./docker/nessie/nessie.properties:/nessie/config/nessie.properties:ro
+      POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,root,s3cr3t"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      QUARKUS_S3_ENDPOINT_OVERRIDE: http://minio:9000
+      QUARKUS_S3_PATH_STYLE_ACCESS: "true"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9002/q/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8182/q/health/ready"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 20
+
+  # ── Polaris bootstrap (creates catalog demo_lh, roles, grants) ───────────
+  polaris-init:
+    image: curlimages/curl:8.11.0
+    container_name: polaris-init
+    depends_on:
+      polaris:
+        condition: service_healthy
+    volumes:
+      - ./docker/polaris/init.sh:/init.sh:ro
+    entrypoint: ["sh", "/init.sh"]
 
   # ── Flink JobManager ──────────────────────────────────────────────────────
   flink-jobmanager:
@@ -106,8 +108,8 @@ services:
         state.checkpoints.dir: file:///tmp/flink-checkpoints
         execution.checkpointing.interval: 30000
     depends_on:
-      nessie:
-        condition: service_healthy
+      polaris-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]
       interval: 15s
@@ -141,8 +143,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      nessie:
-        condition: service_healthy
+      polaris-init:
+        condition: service_completed_successfully
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
@@ -157,6 +159,40 @@ services:
         /opt/flink/bin/sql-client.sh -f /sql/kafka_to_iceberg.sql
       "
 
+  # ── Trino Coordinator ────────────────────────────────────────────────────
+  trino-coordinator:
+    image: trinodb/trino:468
+    container_name: trino-coordinator
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/trino/coordinator/config.properties:/etc/trino/config.properties:ro
+      - ./docker/trino/coordinator/jvm.config:/etc/trino/jvm.config:ro
+      - ./docker/trino/coordinator/node.properties:/etc/trino/node.properties:ro
+      - ./docker/trino/coordinator/log.properties:/etc/trino/log.properties:ro
+      - ./docker/trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    depends_on:
+      polaris-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ── Trino Worker ──────────────────────────────────────────────────────────
+  trino-worker:
+    image: trinodb/trino:468
+    container_name: trino-worker
+    volumes:
+      - ./docker/trino/worker/config.properties:/etc/trino/config.properties:ro
+      - ./docker/trino/worker/jvm.config:/etc/trino/jvm.config:ro
+      - ./docker/trino/worker/node.properties:/etc/trino/node.properties:ro
+      - ./docker/trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    depends_on:
+      trino-coordinator:
+        condition: service_healthy
+
   # ── Jupyter Lab (DuckDB + Iceberg queries) ───────────────────────────────
   jupyter:
     build:
@@ -165,8 +201,8 @@ services:
     ports:
       - "8888:8888"
     depends_on:
-      nessie:
-        condition: service_healthy
+      polaris-init:
+        condition: service_completed_successfully
     volumes:
       - ./docker/jupyter/notebooks:/home/jupyter
     networks:
@@ -183,7 +219,28 @@ services:
       - ./docker/evidence/pages:/app/pages
       - ./docker/evidence/sources:/app/sources
     depends_on:
-      nessie:
+      polaris-init:
+        condition: service_completed_successfully
+      trino-coordinator:
+        condition: service_healthy
+
+  # ── Grafana (Iceberg monitoring dashboard) ───────────────────────────────
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
+    ports:
+      - "3100:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: trino-datasource
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: trino-datasource
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/iceberg-monitoring.json
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      trino-coordinator:
         condition: service_healthy
 
   # ── Kafka producer (Python, sends synthetic events) ───────────────────────

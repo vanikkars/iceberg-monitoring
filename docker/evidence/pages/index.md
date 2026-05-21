@@ -35,7 +35,7 @@ This dashboard presents near real-time banking metrics powered by a streaming da
 ---
 
 
-[Transactions Dashboard](/transactions) | [Users Dashboard](/users)
+[Transactions Dashboard](/transactions) | [Users Dashboard](/users) | [Iceberg Health](/iceberg-health)
 
 </div>
 

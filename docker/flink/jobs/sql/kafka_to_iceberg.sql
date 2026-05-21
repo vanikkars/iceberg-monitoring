@@ -5,14 +5,20 @@
 -- 0. Enable checkpointing every 30 seconds (required for Iceberg sink to commit data)
 SET 'execution.checkpointing.interval' = '30s';
 
--- 1. Register the Iceberg catalog via Nessie's Iceberg REST endpoint.
---    Both Flink and DuckDB point at this same REST API, so they share one catalog view.
---    HadoopFileIO + S3A is used for storage (already configured via core-site.xml).
+-- 1. Register the Iceberg catalog via Polaris's Iceberg REST endpoint.
+--    Flink, Trino, and DuckDB all connect to this same REST API (OAuth2 client credentials).
 CREATE CATALOG iceberg_catalog WITH (
     'type'         = 'iceberg',
     'catalog-impl' = 'org.apache.iceberg.rest.RESTCatalog',
-    'uri'          = 'http://nessie:19120/iceberg',
+    'uri'          = 'http://polaris:8181/api/catalog',
     'warehouse'    = 'demo_lh',
+    'credential'   = 'root:s3cr3t',
+    'scope'        = 'PRINCIPAL_ROLE:ALL',
+    -- Disable credential vending: Polaris defaults to STS AssumeRole which fails against
+    -- MinIO (MinIO rejects the KMS policy Polaris includes in the policy document).
+    -- Setting this to any non-recognized value produces an empty delegation set so Flink
+    -- uses the static MinIO credentials below directly, bypassing STS entirely.
+    'rest.access-delegation' = 'none',
     'io-impl'                = 'org.apache.iceberg.aws.s3.S3FileIO',
     's3.endpoint'            = 'http://minio:9000',
     's3.path-style-access'   = 'true',
@@ -51,8 +57,9 @@ CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.users (
     country     STRING,
     created_at  TIMESTAMP(3)
 ) WITH (
-    'write.format.default' = 'parquet',
-    'write.upsert.enabled' = 'false'
+    'write.format.default'                   = 'parquet',
+    'write.upsert.enabled'                   = 'false',
+    'write.metadata.previous-versions-max'   = '2147483647'
 );
 
 -- 3c. Streaming insert: users
@@ -93,8 +100,9 @@ CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.transactions (
     status          STRING,
     event_time      TIMESTAMP(3)
 ) WITH (
-    'write.format.default' = 'parquet',
-    'write.upsert.enabled' = 'false'
+    'write.format.default'                   = 'parquet',
+    'write.upsert.enabled'                   = 'false',
+    'write.metadata.previous-versions-max'   = '2147483647'
 );
 
 -- 4c. Streaming insert: transactions (only rows with a non-null user_id)

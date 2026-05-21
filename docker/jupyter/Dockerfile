@@ -5,7 +5,10 @@ WORKDIR /home/jupyter
 RUN pip install --no-cache-dir \
     jupyterlab==4.3.6 \
     duckdb==1.5.2 \
-    pandas==2.2.3
+    pandas==2.2.3 \
+    boto3==1.35.0 \
+    ipywidgets==8.1.5 \
+    trino==0.330.0
 
 EXPOSE 8888
 

@@ -16,3 +16,4 @@ docker/nessie/data/
 # Jupyter
 .ipynb_checkpoints/
 .python-version
+tmp
