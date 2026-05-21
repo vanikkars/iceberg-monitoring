@@ -15,7 +15,7 @@ Iceberg tables using Apache Flink, with a live BI dashboard powered by Evidence.
 | kafka               | apache/kafka:4.0.2 (KRaft, no ZooKeeper)   | 9092               |
 | minio               | minio/minio                                | 9000, 9001 (UI)    |
 | minio-init          | minio/mc (creates bucket on first boot)    | —                  |
-| nessie              | ghcr.io/projectnessie/nessie:0.107.5       | 19120              |
+| polaris             | apache/polaris:latest                      | 8181, 8182 (health)|
 | flink-jobmanager    | custom (Flink + Iceberg + S3 JARs)         | 8081 (UI)          |
 | flink-taskmanager   | custom                                     | —                  |
 | flink-sql-job       | custom (submits SQL job then exits)        | —                  |
@@ -65,10 +65,11 @@ Users are seeded upfront so transactions always reference a valid `user_id`.
 The producer then streams transactions continuously at a configurable rate
 (default: 2 events/sec, set via `EVENTS_PER_SECOND`).
 
-## Iceberg catalog (Nessie)
+## Iceberg catalog (Polaris)
 
-Flink, DuckDB (Jupyter + Evidence) all share the same catalog via Nessie's
-Iceberg REST API at `http://nessie:19120/iceberg`. The two Iceberg tables are:
+Flink, DuckDB (Jupyter + Evidence) all share the same catalog via Apache
+Polaris's Iceberg REST API at `http://polaris:8181/api/catalog`, authenticated
+with OAuth2 client credentials. The two Iceberg tables are:
 
 - `iceberg_catalog.demo.users`
 - `iceberg_catalog.demo.transactions`
@@ -81,14 +82,14 @@ Iceberg REST API at `http://nessie:19120/iceberg`. The two Iceberg tables are:
 | Flink UI    | http://localhost:8081                       | —                        |
 | JupyterLab  | http://localhost:8888                       | no password              |
 | MinIO UI    | http://localhost:9001                       | minioadmin / minioadmin  |
-| Nessie API  | http://localhost:19120/iceberg/v1/config    | —                        |
+| Polaris API | http://localhost:8181/api/catalog/v1/config | root / s3cr3t (OAuth2)   |
 
 ## Evidence dashboard
 
 The Evidence dashboard at **http://localhost:3000** shows live metrics sourced
 from the Iceberg tables. On startup it:
 
-1. Runs `evidence sources` — connects DuckDB to Nessie via the Iceberg REST
+1. Runs `evidence sources` — connects DuckDB to Polaris via the Iceberg REST
    catalog, executes the SQL queries in `sources/demo_lh/`, and writes
    Parquet snapshots to `.evidence/template/static/data/`.
 2. Starts the Vite dev server which serves the dashboard at port 3000.
@@ -109,7 +110,7 @@ docker exec evidence node_modules/.bin/evidence sources
 ## JupyterLab exploration
 
 Open **http://localhost:8888** and run `query_iceberg.ipynb`. It attaches
-DuckDB directly to the Nessie REST catalog and queries both tables.
+DuckDB directly to the Polaris REST catalog and queries both tables.
 
 ## Query from Flink SQL client
 

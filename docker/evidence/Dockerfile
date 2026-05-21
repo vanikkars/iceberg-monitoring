@@ -29,5 +29,5 @@ COPY evidence.config.yaml ./
 
 EXPOSE 3000
 
-# Run sources (pulls data from DuckDB/Nessie) then start dev server
+# Run sources (pulls data from DuckDB via Polaris) then start dev server
 CMD ["sh", "-c", "npm run sources && npm run dev"]
