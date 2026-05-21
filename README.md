@@ -21,6 +21,7 @@ Iceberg tables using Apache Flink, with a live BI dashboard powered by Evidence.
 | flink-sql-job       | custom (submits SQL job then exits)        | —                  |
 | jupyter             | custom (DuckDB + Iceberg + pyiceberg)      | 8888               |
 | evidence            | custom (Node 20, Evidence 40.x)            | 3000               |
+| grafana             | grafana/grafana:11.5.2 (+ trino-datasource)| 3100               |
 | kafka-producer      | custom (Python 3, kafka-python)            | —                  |
 
 ## Quick start
@@ -79,6 +80,7 @@ with OAuth2 client credentials. The two Iceberg tables are:
 | Service     | URL                                         | Credentials              |
 |-------------|---------------------------------------------|--------------------------|
 | Evidence BI | http://localhost:3000                       | —                        |
+| Grafana     | http://localhost:3100                       | admin / admin            |
 | Flink UI    | http://localhost:8081                       | —                        |
 | JupyterLab  | http://localhost:8888                       | no password              |
 | MinIO UI    | http://localhost:9001                       | minioadmin / minioadmin  |
@@ -105,6 +107,37 @@ To refresh data without rebuilding the container:
 
 ```bash
 docker exec evidence node_modules/.bin/evidence sources
+```
+
+## Grafana monitoring dashboard
+
+Grafana at **http://localhost:3100** (admin / admin) opens directly on the
+**Iceberg Monitoring** dashboard, which surfaces health signals from Iceberg's
+metadata tables:
+
+- Health KPIs per table — total records, total commits, average data-file
+  size, minutes since the last commit
+- Commit cadence — commits and records added per 5-minute window
+- Records growth — cumulative total records and per-commit deltas
+- File distribution — current data-file count, size buckets, totals
+- Manifest health — active manifests, orphaned-manifest estimate, pending
+  deletes
+- Daily stats — added records and commit counts per day
+
+A `target_table` dashboard variable filters/repeats panels for `transactions`,
+`users`, or both.
+
+Data path: Grafana → Trino (`trino-datasource` plugin) → Polaris REST catalog
+→ MinIO. Provisioning lives in:
+
+- `docker/grafana/provisioning/datasources/trino.yaml` — Trino datasource
+- `docker/grafana/provisioning/dashboards/dashboard.yaml` — dashboard provider
+- `docker/grafana/dashboards/iceberg-monitoring.json` — dashboard JSON
+
+To edit the dashboard, modify the JSON and restart the container:
+
+```bash
+docker compose restart grafana
 ```
 
 ## JupyterLab exploration
