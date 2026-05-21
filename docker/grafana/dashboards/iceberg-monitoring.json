@@ -125,11 +125,20 @@
       "targets": [{ "refId": "A", "rawSQL": "SELECT\n  table_name,\n  file_count,\n  total_records,\n  avg_records_per_file,\n  min_records_per_file,\n  max_records_per_file,\n  avg_file_size_kb,\n  min_file_size_kb,\n  max_file_size_kb,\n  total_size_mb\nFROM (\n  SELECT\n    'transactions' AS table_name,\n    count(*) AS file_count,\n    sum(record_count) AS total_records,\n    round(CAST(avg(record_count) AS DOUBLE), 0) AS avg_records_per_file,\n    min(record_count) AS min_records_per_file,\n    max(record_count) AS max_records_per_file,\n    round(CAST(avg(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS avg_file_size_kb,\n    round(CAST(min(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS min_file_size_kb,\n    round(CAST(max(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS max_file_size_kb,\n    round(CAST(sum(file_size_in_bytes) AS DOUBLE) / 1024.0 / 1024.0, 2) AS total_size_mb\n  FROM iceberg.demo.\"transactions$files\"\n  WHERE content = 0\n  UNION ALL\n  SELECT\n    'users' AS table_name,\n    count(*) AS file_count,\n    sum(record_count) AS total_records,\n    round(CAST(avg(record_count) AS DOUBLE), 0) AS avg_records_per_file,\n    min(record_count) AS min_records_per_file,\n    max(record_count) AS max_records_per_file,\n    round(CAST(avg(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS avg_file_size_kb,\n    round(CAST(min(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS min_file_size_kb,\n    round(CAST(max(file_size_in_bytes) AS DOUBLE) / 1024.0, 2) AS max_file_size_kb,\n    round(CAST(sum(file_size_in_bytes) AS DOUBLE) / 1024.0 / 1024.0, 2) AS total_size_mb\n  FROM iceberg.demo.\"users$files\"\n  WHERE content = 0\n)\nWHERE table_name IN (${target_table:singlequote})", "format": 1 }]
     },
 
-    { "type": "row", "title": "Manifest Health", "collapsed": false, "gridPos": { "x": 0, "y": 44, "w": 24, "h": 1 }, "id": 104 },
+    {
+      "type": "timeseries", "title": "Avg File Size Over Time", "id": 31,
+      "gridPos": { "x": 0, "y": 44, "w": 24, "h": 8 },
+      "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "kbytes", "custom": { "lineWidth": 2 } } },
+      "targets": [{ "refId": "A", "rawSQL": "SELECT\n  committed_at AS time,\n  max(CASE WHEN tbl = 'transactions' AND total_data_files > 0\n      THEN round(CAST(total_files_size AS DOUBLE) / total_data_files / 1024.0, 2) END) AS transactions,\n  max(CASE WHEN tbl = 'users' AND total_data_files > 0\n      THEN round(CAST(total_files_size AS DOUBLE) / total_data_files / 1024.0, 2) END) AS users\nFROM (\n  SELECT\n    committed_at,\n    'transactions' AS tbl,\n    CAST(element_at(summary, 'total-files-size') AS BIGINT) AS total_files_size,\n    CAST(element_at(summary, 'total-data-files') AS BIGINT) AS total_data_files\n  FROM iceberg.demo.\"transactions$snapshots\"\n  UNION ALL\n  SELECT\n    committed_at,\n    'users' AS tbl,\n    CAST(element_at(summary, 'total-files-size') AS BIGINT) AS total_files_size,\n    CAST(element_at(summary, 'total-data-files') AS BIGINT) AS total_data_files\n  FROM iceberg.demo.\"users$snapshots\"\n)\nWHERE tbl IN (${target_table:singlequote})\nGROUP BY committed_at\nORDER BY committed_at", "format": 0 }]
+    },
+
+    { "type": "row", "title": "Manifest Health", "collapsed": false, "gridPos": { "x": 0, "y": 53, "w": 24, "h": 1 }, "id": 104 },
 
     {
       "type": "table", "title": "Manifest Health", "id": 40,
-      "gridPos": { "x": 0, "y": 45, "w": 24, "h": 8 },
+      "gridPos": { "x": 0, "y": 54, "w": 24, "h": 8 },
       "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
       "options": {},
       "fieldConfig": {
@@ -142,11 +151,11 @@
       "targets": [{ "refId": "A", "rawSQL": "WITH txn_manifests AS (\n  SELECT\n    'transactions' AS table_name,\n    count(*) AS active_manifest_count,\n    sum(added_data_files_count) AS added_data_files,\n    sum(existing_data_files_count) AS existing_data_files,\n    sum(deleted_data_files_count) AS pending_deleted_files,\n    sum(added_rows_count) AS added_rows,\n    sum(existing_rows_count) AS existing_rows,\n    sum(deleted_rows_count) AS pending_deleted_rows\n  FROM iceberg.demo.\"transactions$manifests\"\n),\ntxn_snap_count AS (\n  SELECT count(*) AS total_snapshot_count FROM iceberg.demo.\"transactions$snapshots\"\n),\nusr_manifests AS (\n  SELECT\n    'users' AS table_name,\n    count(*) AS active_manifest_count,\n    sum(added_data_files_count) AS added_data_files,\n    sum(existing_data_files_count) AS existing_data_files,\n    sum(deleted_data_files_count) AS pending_deleted_files,\n    sum(added_rows_count) AS added_rows,\n    sum(existing_rows_count) AS existing_rows,\n    sum(deleted_rows_count) AS pending_deleted_rows\n  FROM iceberg.demo.\"users$manifests\"\n),\nusr_snap_count AS (\n  SELECT count(*) AS total_snapshot_count FROM iceberg.demo.\"users$snapshots\"\n)\nSELECT\n  m.table_name,\n  m.active_manifest_count,\n  s.total_snapshot_count,\n  greatest(0, s.total_snapshot_count - m.active_manifest_count) AS est_orphaned_manifests,\n  m.added_data_files,\n  m.existing_data_files,\n  m.pending_deleted_files,\n  m.added_rows,\n  m.existing_rows,\n  m.pending_deleted_rows\nFROM txn_manifests m, txn_snap_count s\nWHERE 'transactions' IN (${target_table:singlequote})\nUNION ALL\nSELECT\n  m.table_name,\n  m.active_manifest_count,\n  s.total_snapshot_count,\n  greatest(0, s.total_snapshot_count - m.active_manifest_count) AS est_orphaned_manifests,\n  m.added_data_files,\n  m.existing_data_files,\n  m.pending_deleted_files,\n  m.added_rows,\n  m.existing_rows,\n  m.pending_deleted_rows\nFROM usr_manifests m, usr_snap_count s\nWHERE 'users' IN (${target_table:singlequote})", "format": 1 }]
     },
 
-    { "type": "row", "title": "Daily Stats", "collapsed": false, "gridPos": { "x": 0, "y": 53, "w": 24, "h": 1 }, "id": 105 },
+    { "type": "row", "title": "Daily Stats", "collapsed": false, "gridPos": { "x": 0, "y": 62, "w": 24, "h": 1 }, "id": 105 },
 
     {
       "type": "barchart", "title": "Daily Added Records", "id": 50,
-      "gridPos": { "x": 0, "y": 54, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 63, "w": 12, "h": 8 },
       "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
       "options": { "xField": "time", "stacking": "none", "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "fieldConfig": { "defaults": { "unit": "short" } },
@@ -154,7 +163,7 @@
     },
     {
       "type": "barchart", "title": "Daily Commit Count", "id": 51,
-      "gridPos": { "x": 12, "y": 54, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 63, "w": 12, "h": 8 },
       "datasource": { "type": "trino-datasource", "uid": "trino-iceberg" },
       "options": { "xField": "time", "stacking": "none", "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "fieldConfig": { "defaults": { "unit": "short" } },
