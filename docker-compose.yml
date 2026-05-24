@@ -253,4 +253,5 @@ services:
         condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      EVENTS_PER_SECOND: "2"
+    volumes:
+      - ./docker/producer/producer.py:/app/producer.py:ro
