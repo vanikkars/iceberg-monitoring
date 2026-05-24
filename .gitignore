@@ -10,9 +10,6 @@ wheels/
 # Virtual environments
 .venv
 
-# Nessie RocksDB data
-docker/nessie/data/
-
 # Jupyter
 .ipynb_checkpoints/
 .python-version

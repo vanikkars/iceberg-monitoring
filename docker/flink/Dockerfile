@@ -40,7 +40,7 @@ RUN curl -fsSL \
     https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar \
     -o ${FLINK_LIB}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar
 
-# ── commons-logging (required by nessie-client / iceberg at runtime) ──────
+# ── commons-logging (required by iceberg REST client at runtime) ─────────
 RUN curl -fsSL \
     https://repo1.maven.org/maven2/commons-logging/commons-logging/1.2/commons-logging-1.2.jar \
     -o ${FLINK_LIB}/commons-logging-1.2.jar
