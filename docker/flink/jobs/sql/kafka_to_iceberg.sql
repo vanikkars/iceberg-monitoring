@@ -69,7 +69,7 @@ FROM kafka_users;
 
 -- ── TRANSACTIONS ──────────────────────────────────────────────────────────
 
--- 4a. Kafka source: transactions
+-- 4a. Kafka source: transactions (no partitions)
 --     user_id is guaranteed non-null by the producer (seeded before any transaction)
 CREATE TEMPORARY TABLE kafka_transactions (
     transaction_id  STRING,
@@ -90,7 +90,7 @@ CREATE TEMPORARY TABLE kafka_transactions (
     'json.timestamp-format.standard' = 'ISO-8601'
 );
 
--- 4b. Iceberg sink: transactions
+-- 4b. Iceberg sink: transactions (no partitions)
 CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.transactions (
     transaction_id  STRING,
     user_id         STRING,
@@ -107,6 +107,113 @@ CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.transactions (
 
 -- 4c. Streaming insert: transactions (only rows with a non-null user_id)
 INSERT INTO iceberg_catalog.demo.transactions
+SELECT transaction_id, user_id, amount, currency, `type`, status, event_time
+FROM kafka_transactions
+WHERE user_id IS NOT NULL;
+
+-- ── TRANSACTIONS BY USER BUCKET ──────────────────────────────────────────────
+
+-- 5a. Iceberg sink: transactions partitioned into 32 buckets by user_id.
+--     Table is pre-created by trino-init with bucket(user_id, 32) spec.
+--     PARTITIONED BY is omitted here: Flink 2.0's parser rejects bucket()
+--     transform syntax.  IF NOT EXISTS means Flink skips recreation and uses
+--     the partition spec already stored in the Iceberg catalog metadata.
+CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.transactions_by_user_32 (
+    transaction_id  STRING,
+    user_id         STRING,
+    amount          DOUBLE,
+    currency        STRING,
+    `type`          STRING,
+    status          STRING,
+    event_time      TIMESTAMP(3)
+) WITH (
+    'write.format.default'                   = 'parquet',
+    'write.upsert.enabled'                   = 'false',
+    'write.metadata.previous-versions-max'   = '2147483647'
+);
+
+-- 5b. Streaming insert: transactions_by_user_32
+INSERT INTO iceberg_catalog.demo.transactions_by_user_32
+SELECT transaction_id, user_id, amount, currency, `type`, status, event_time
+FROM kafka_transactions
+WHERE user_id IS NOT NULL;
+
+
+-- ── TRANSACTIONS BY USER BUCKET (4) ─────────────────────────────────────────
+
+-- 6a. Iceberg sink: same bucket-by-user scheme but 4 buckets.
+--     Pre-created by trino-init; PARTITIONED BY omitted for same reason as above.
+CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.transactions_by_user_4 (
+    transaction_id  STRING,
+    user_id         STRING,
+    amount          DOUBLE,
+    currency        STRING,
+    `type`          STRING,
+    status          STRING,
+    event_time      TIMESTAMP(3)
+) WITH (
+    'write.format.default'                   = 'parquet',
+    'write.upsert.enabled'                   = 'false',
+    'write.metadata.previous-versions-max'   = '2147483647'
+);
+
+-- 6b. Streaming insert: transactions_by_user_4
+INSERT INTO iceberg_catalog.demo.transactions_by_user_4
+SELECT transaction_id, user_id, amount, currency, `type`, status, event_time
+FROM kafka_transactions
+WHERE user_id IS NOT NULL;
+
+
+-- ── TRANSACTIONS BY MINUTE ───────────────────────────────────────────────────
+
+-- 7a. Iceberg sink: transactions partitioned by truncated event minute.
+--     Iceberg has no native minute transform, so we materialise event_minute as
+--     a STRING column ('yyyy-MM-dd HH:mm') and use identity partitioning on it.
+--     Pre-created by trino-init; PARTITIONED BY omitted here for consistency.
+CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.transactions_by_minute (
+    transaction_id  STRING,
+    user_id         STRING,
+    amount          DOUBLE,
+    currency        STRING,
+    `type`          STRING,
+    status          STRING,
+    event_time      TIMESTAMP(3),
+    event_minute    STRING
+) WITH (
+    'write.format.default'                   = 'parquet',
+    'write.upsert.enabled'                   = 'false',
+    'write.metadata.previous-versions-max'   = '2147483647'
+);
+
+-- 7b. Streaming insert: transactions_by_minute
+INSERT INTO iceberg_catalog.demo.transactions_by_minute
+SELECT
+    transaction_id, user_id, amount, currency, `type`, status, event_time,
+    DATE_FORMAT(event_time, 'yyyy-MM-dd HH:mm') AS event_minute
+FROM kafka_transactions
+WHERE user_id IS NOT NULL;
+
+-- ── TRANSACTIONS BY DATE ────────────────────────────────
+
+-- 8a. Iceberg sink: partitioned by calendar day of event_time.
+--     Pre-created by trino-init with day(event_time) spec; PARTITIONED BY
+--     omitted because Flink 2.0's parser also rejects day() as a transform.
+CREATE TABLE IF NOT EXISTS iceberg_catalog.demo.transactions_by_date (
+    transaction_id  STRING,
+    user_id         STRING,
+    amount          DOUBLE,
+    currency        STRING,
+    `type`          STRING,
+    status          STRING,
+    event_time      TIMESTAMP(3)
+) WITH (
+    'write.format.default'                   = 'parquet',
+    'write.upsert.enabled'                   = 'false',
+    'write.metadata.previous-versions-max'   = '2147483647'
+);
+
+-- 8b. Streaming insert: transactions_by_date
+INSERT INTO iceberg_catalog.demo.transactions_by_date
 SELECT transaction_id, user_id, amount, currency, `type`, status, event_time
 FROM kafka_transactions
 WHERE user_id IS NOT NULL;
