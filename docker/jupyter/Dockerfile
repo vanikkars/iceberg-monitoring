@@ -7,7 +7,9 @@ RUN pip install --no-cache-dir \
     pandas==2.2.3 \
     boto3==1.35.0 \
     ipywidgets==8.1.5 \
-    trino==0.330.0
+    trino==0.330.0 \
+    matplotlib==3.9.4 \
+    numpy==2.2.6
 
 EXPOSE 8888
 

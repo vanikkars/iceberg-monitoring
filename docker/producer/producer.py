@@ -1,13 +1,18 @@
 """
-Synthetic event producer.
+Synthetic event producer — batch mode.
 
 Publishes JSON events to two Kafka topics:
-  - users        : user registration events
+  - users        : user registration events (seeded once up-front)
   - transactions : financial transactions referencing valid user IDs
 
-Users are seeded up-front so that transactions always reference an
-existing user_id — referential integrity is guaranteed within the
-producer.
+Batch behaviour
+---------------
+Sends TOTAL_ROWS transactions split evenly across N_BATCHES batches,
+one batch per BATCH_INTERVAL_SECONDS.  After the final batch the
+process exits cleanly.
+
+  default: 1 000 000 rows, 10 batches, 60 s interval
+           → 100 000 rows/min for 10 minutes
 
 Event shapes
 ------------
@@ -38,16 +43,17 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-EVENTS_PER_SECOND = float(os.environ.get("EVENTS_PER_SECOND", "500"))
-WAIT_TILL_BOOT = int(os.environ.get('WAIT_TILL_BOOT', 240)) # wait for 2 minutes before producing messages
+BOOTSTRAP_SERVERS    = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+WAIT_TILL_BOOT       = int(os.environ.get("WAIT_TILL_BOOT", "240"))
+TOTAL_ROWS           = int(os.environ.get("TOTAL_ROWS", "1000000"))
+N_BATCHES            = int(os.environ.get("N_BATCHES", "10"))
+BATCH_INTERVAL_S     = int(os.environ.get("BATCH_INTERVAL_SECONDS", "60"))
+N_USERS              = 50
 
-N_USERS = 50
-
-TXN_TYPES          = ["PURCHASE", "REFUND", "TRANSFER", "WITHDRAWAL", "DEPOSIT"]
-TXN_STATUSES       = ["COMPLETED", "PENDING", "FAILED", "REVERSED"]
-CURRENCIES         = ["USD", "EUR", "GBP", "CAD", "AUD"]
-COUNTRIES          = ["US", "DE", "GB", "CA", "AU", "FR", "JP", "BR"]
+TXN_TYPES    = ["PURCHASE", "REFUND", "TRANSFER", "WITHDRAWAL", "DEPOSIT"]
+TXN_STATUSES = ["COMPLETED", "PENDING", "FAILED", "REVERSED"]
+CURRENCIES   = ["USD", "EUR", "GBP", "CAD", "AUD"]
+COUNTRIES    = ["US", "DE", "GB", "CA", "AU", "FR", "JP", "BR"]
 
 FIRST_NAMES = ["Alice", "Bob", "Carol", "Dave", "Eve", "Frank", "Grace",
                "Hank", "Iris", "Jack", "Karen", "Leo", "Mia", "Ned",
@@ -86,7 +92,6 @@ def _now() -> str:
 
 
 def _build_user_pool(n: int) -> list[UserEvent]:
-    """Pre-generate the full set of users so downstream events can reference them."""
     users = []
     for i in range(1, n + 1):
         first = random.choice(FIRST_NAMES)
@@ -104,7 +109,7 @@ def _build_user_pool(n: int) -> list[UserEvent]:
 def make_transaction(seq: int, user_pool: list[UserEvent]) -> TransactionEvent:
     user = random.choice(user_pool)
     return TransactionEvent(
-        transaction_id=f"txn-{seq:06d}",
+        transaction_id=f"txn-{seq:07d}",
         user_id=user.user_id,
         amount=round(random.uniform(1.0, 2000.0), 2),
         currency=random.choice(CURRENCIES),
@@ -117,8 +122,9 @@ def make_transaction(seq: int, user_pool: list[UserEvent]) -> TransactionEvent:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    log.info("Connecting to Kafka at %s …", BOOTSTRAP_SERVERS)
+    rows_per_batch = TOTAL_ROWS // N_BATCHES
 
+    log.info("Connecting to Kafka at %s …", BOOTSTRAP_SERVERS)
     producer = KafkaProducer(
         bootstrap_servers=BOOTSTRAP_SERVERS,
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -126,34 +132,45 @@ def main() -> None:
         linger_ms=5,
         batch_size=65536,
     )
+
     log.info("Waiting %s s for the environment to set up …", WAIT_TILL_BOOT)
     time.sleep(WAIT_TILL_BOOT)
 
-    # 1. Seed users — publish all of them before any transactions/orders
+    # 1. Seed users
     log.info("Seeding %d users into 'users' topic …", N_USERS)
     user_pool = _build_user_pool(N_USERS)
     for user in user_pool:
         producer.send("users", value=asdict(user))
-        log.debug("[users] → %s", asdict(user))
     producer.flush()
     log.info("User seed complete.")
 
-    # 2. Continuous stream of transactions
-    log.info("Publishing transactions at %s events/sec …", EVENTS_PER_SECOND)
-    tick = 0.1  # 100 ms window; reduces sleep calls from N to 10/sec
-    batch_size = max(1, round(EVENTS_PER_SECOND * tick))
-    txn_seq = 1
+    # 2. Batch loop
+    log.info(
+        "Starting batch run: %d batches × %d rows, interval %ds  (total: %d rows)",
+        N_BATCHES, rows_per_batch, BATCH_INTERVAL_S, N_BATCHES * rows_per_batch,
+    )
 
-    while True:
-        deadline = time.monotonic() + tick
-        for _ in range(batch_size):
+    txn_seq = 1
+    for batch in range(1, N_BATCHES + 1):
+        batch_start = time.monotonic()
+        log.info("Batch %d/%d — sending %d rows …", batch, N_BATCHES, rows_per_batch)
+
+        for _ in range(rows_per_batch):
             txn = make_transaction(txn_seq, user_pool)
             producer.send("transactions", value=asdict(txn))
-            log.debug("[transactions] → txn-%06d", txn_seq)
             txn_seq += 1
-        remainder = deadline - time.monotonic()
-        if remainder > 0:
-            time.sleep(remainder)
+
+        producer.flush()
+        sent_so_far = (batch) * rows_per_batch
+        log.info("Batch %d/%d done — %d rows sent so far", batch, N_BATCHES, sent_so_far)
+
+        if batch < N_BATCHES:
+            elapsed  = time.monotonic() - batch_start
+            sleep_for = max(0.0, BATCH_INTERVAL_S - elapsed)
+            log.info("Sleeping %.1f s until next batch …", sleep_for)
+            time.sleep(sleep_for)
+
+    log.info("All %d rows published. Producer exiting.", N_BATCHES * rows_per_batch)
 
 
 if __name__ == "__main__":

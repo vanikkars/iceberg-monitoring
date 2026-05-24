@@ -92,6 +92,24 @@ services:
       - ./docker/polaris/init.sh:/init.sh:ro
     entrypoint: ["sh", "/init.sh"]
 
+  # ── Kafka topic bootstrap (creates topics before Flink job starts) ───────
+  kafka-init:
+    image: apache/kafka:4.0.2
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: >
+      /bin/bash -c "
+        /opt/kafka/bin/kafka-topics.sh --create --if-not-exists \
+          --bootstrap-server kafka:29092 --topic users \
+          --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --create --if-not-exists \
+          --bootstrap-server kafka:29092 --topic transactions \
+          --partitions 1 --replication-factor 1 &&
+        echo 'Kafka topics ready.'
+      "
+
   # ── Flink JobManager ──────────────────────────────────────────────────────
   flink-jobmanager:
     build:
@@ -103,7 +121,7 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 4
+        taskmanager.numberOfTaskSlots: 8
         state.backend: hashmap
         state.checkpoints.dir: file:///tmp/flink-checkpoints
         execution.checkpointing.interval: 30000
@@ -128,10 +146,30 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 4
+        taskmanager.numberOfTaskSlots: 8
         state.backend: hashmap
         state.checkpoints.dir: file:///tmp/flink-checkpoints
         execution.checkpointing.interval: 30000
+
+  # ── Trino init (pre-creates bucket/day-partitioned Iceberg tables) ────────
+  # Flink 2.0's SQL parser rejects bucket() and day() in PARTITIONED BY, so
+  # these tables must exist in the catalog before the Flink job starts.
+  trino-init:
+    image: trinodb/trino:468
+    container_name: trino-init
+    depends_on:
+      trino-coordinator:
+        condition: service_healthy
+    volumes:
+      - ./docker/trino/init.sql:/init.sql:ro
+    entrypoint: >
+      /bin/bash -c "
+        until trino --server trino-coordinator:8080 --user trino --execute 'SELECT 1' > /dev/null 2>&1; do
+          echo 'Waiting for Trino to be query-ready...' && sleep 5;
+        done &&
+        trino --server trino-coordinator:8080 --user trino --file /init.sql &&
+        echo 'trino-init complete.'
+      "
 
   # ── Flink SQL Job (submits the SQL job then exits) ────────────────────────
   flink-sql-job:
@@ -141,9 +179,11 @@ services:
     depends_on:
       flink-jobmanager:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       polaris-init:
+        condition: service_completed_successfully
+      trino-init:
         condition: service_completed_successfully
     environment:
       FLINK_PROPERTIES: |
